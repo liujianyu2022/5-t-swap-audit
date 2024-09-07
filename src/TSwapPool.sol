@@ -1,16 +1,3 @@
-/**
- * /-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\
- * |                                     |
- * \ _____    ____                       /
- * -|_   _|  / ___|_      ____ _ _ __    -
- * /  | |____\___ \ \ /\ / / _` | '_ \   \
- * |  | |_____|__) \ V  V / (_| | |_) |  |
- * \  |_|    |____/ \_/\_/ \__,_| .__/   /
- * -                            |_|      -
- * /                                     \
- * |                                     |
- * \-/|\-/|\-/|\-/|\-/|\-/|\-/|\-/|\-/|\-/
- */
 // SPDX-License-Identifier: GNU General Public License v3.0
 pragma solidity 0.8.20;
 
@@ -19,14 +6,17 @@ import {ERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract TSwapPool is ERC20 {
     error TSwapPool__DeadlineHasPassed(uint64 deadline);
+    
     error TSwapPool__MaxPoolTokenDepositTooHigh(
         uint256 maximumPoolTokensToDeposit,
         uint256 poolTokensToDeposit
     );
+
     error TSwapPool__MinLiquidityTokensToMintTooLow(
         uint256 minimumLiquidityTokensToMint,
         uint256 liquidityTokensToMint
     );
+
     error TSwapPool__WethDepositAmountTooLow(
         uint256 minimumWethDeposit,
         uint256 wethToDeposit
@@ -40,11 +30,11 @@ contract TSwapPool is ERC20 {
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
     //////////////////////////////////////////////////////////////*/
-    IERC20 private immutable i_wethToken;
-    IERC20 private immutable i_poolToken;
-    uint256 private constant MINIMUM_WETH_LIQUIDITY = 1_000_000_000;
-    uint256 private swap_count = 0;
-    uint256 private constant SWAP_COUNT_MAX = 10;
+    IERC20 private immutable i_wethToken;                                       // WETH 代币的合约地址
+    IERC20 private immutable i_poolToken;                                       // 另一个 ERC20 代币的合约地址
+    uint256 private constant MINIMUM_WETH_LIQUIDITY = 1_000_000_000;            // 1 gwei
+    uint256 private swap_count = 0;                                             // 记录当前的交换次数
+    uint256 private constant SWAP_COUNT_MAX = 10;                               // 触发奖励的最大交换次数
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -87,12 +77,7 @@ contract TSwapPool is ERC20 {
     /*//////////////////////////////////////////////////////////////
                                FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-    constructor(
-        address poolToken,
-        address wethToken,
-        string memory liquidityTokenName,
-        string memory liquidityTokenSymbol
-    ) ERC20(liquidityTokenName, liquidityTokenSymbol) {
+    constructor(address poolToken, address wethToken, string memory liquidityTokenName, string memory liquidityTokenSymbol) ERC20(liquidityTokenName, liquidityTokenSymbol) {
         i_wethToken = IERC20(wethToken);
         i_poolToken = IERC20(poolToken);
     }
@@ -102,53 +87,47 @@ contract TSwapPool is ERC20 {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Adds liquidity to the pool
-    /// @dev The invariant of this function is that the ratio of WETH, PoolTokens, and LiquidityTokens is the same
-    /// before and after the transaction
+    /// @dev The invariant of this function is that the ratio of WETH, PoolTokens, and LiquidityTokens is the same before and after the transaction
     /// @param wethToDeposit Amount of WETH the user is going to deposit
     /// @param minimumLiquidityTokensToMint We derive the amount of liquidity tokens to mint from the amount of WETH the
     /// user is going to deposit, but set a minimum so they know approx what they will accept
     /// @param maximumPoolTokensToDeposit The maximum amount of pool tokens the user is willing to deposit, again it's
     /// derived from the amount of WETH the user is going to deposit
     /// @param deadline The deadline for the transaction to be completed by
-    function deposit(
-        uint256 wethToDeposit,
-        uint256 minimumLiquidityTokensToMint,
-        uint256 maximumPoolTokensToDeposit,
-        uint64 deadline
-    )
-        external
-        revertIfZero(wethToDeposit)
-        returns (uint256 liquidityTokensToMint)
-    {
+    function deposit(uint256 wethToDeposit, uint256 minimumLiquidityTokensToMint, uint256 maximumPoolTokensToDeposit, uint64 deadline) external revertIfZero(wethToDeposit) returns (uint256 liquidityTokensToMint){
         if (wethToDeposit < MINIMUM_WETH_LIQUIDITY) {
             revert TSwapPool__WethDepositAmountTooLow(
                 MINIMUM_WETH_LIQUIDITY,
                 wethToDeposit
             );
         }
+
+        // 向已有的流动性池添加流动性
         if (totalLiquidityTokenSupply() > 0) {
+
+            // 函数获取合约中当前的 WETH 和池子代币的储备量。
             uint256 wethReserves = i_wethToken.balanceOf(address(this));
             uint256 poolTokenReserves = i_poolToken.balanceOf(address(this));
-            // Our invariant says weth, poolTokens, and liquidity tokens must always have the same ratio after the
-            // initial deposit
-            // poolTokens / constant(k) = weth
-            // weth / constant(k) = liquidityTokens
+
+
+            // Our invariant says weth, poolTokens, and liquidity tokens must always have the same ratio after the initial deposit
+            // poolTokens / weth = constant(k) 
+            // weth / liquidityTokens = constant(k) 
             // aka...
             // weth / poolTokens = constant(k)
             // To make sure this holds, we can make sure the new balance will match the old balance
             // (wethReserves + wethToDeposit) / (poolTokenReserves + poolTokensToDeposit) = constant(k)
-            // (wethReserves + wethToDeposit) / (poolTokenReserves + poolTokensToDeposit) =
-            // (wethReserves / poolTokenReserves)
-            //
+            // (wethReserves + wethToDeposit) / (poolTokenReserves + poolTokensToDeposit) = (wethReserves / poolTokenReserves)
+    
             // So we can do some elementary math now to figure out poolTokensToDeposit...
             // (wethReserves + wethToDeposit) = (poolTokenReserves + poolTokensToDeposit) * (wethReserves / poolTokenReserves)
             // wethReserves + wethToDeposit  = poolTokenReserves * (wethReserves / poolTokenReserves) + poolTokensToDeposit * (wethReserves / poolTokenReserves)
             // wethReserves + wethToDeposit = wethReserves + poolTokensToDeposit * (wethReserves / poolTokenReserves)
             // wethToDeposit / (wethReserves / poolTokenReserves) = poolTokensToDeposit
             // (wethToDeposit * poolTokenReserves) / wethReserves = poolTokensToDeposit
-            uint256 poolTokensToDeposit = getPoolTokensToDepositBasedOnWeth(
-                wethToDeposit
-            );
+
+            uint256 poolTokensToDeposit = getPoolTokensToDepositBasedOnWeth(wethToDeposit);
+
             if (maximumPoolTokensToDeposit < poolTokensToDeposit) {
                 revert TSwapPool__MaxPoolTokenDepositTooHigh(
                     maximumPoolTokensToDeposit,
@@ -157,21 +136,18 @@ contract TSwapPool is ERC20 {
             }
 
             // We do the same thing for liquidity tokens. Similar math.
-            liquidityTokensToMint =
-                (wethToDeposit * totalLiquidityTokenSupply()) /
-                wethReserves;
+            liquidityTokensToMint = (wethToDeposit * totalLiquidityTokenSupply()) / wethReserves;
+
             if (liquidityTokensToMint < minimumLiquidityTokensToMint) {
                 revert TSwapPool__MinLiquidityTokensToMintTooLow(
                     minimumLiquidityTokensToMint,
                     liquidityTokensToMint
                 );
             }
-            _addLiquidityMintAndTransfer(
-                wethToDeposit,
-                poolTokensToDeposit,
-                liquidityTokensToMint
-            );
-        } else {
+
+            _addLiquidityMintAndTransfer(wethToDeposit, poolTokensToDeposit, liquidityTokensToMint);
+        } else {        
+            // 初始资金注入
             // This will be the "initial" funding of the protocol. We are starting from blank here!
             // We just have them send the tokens in, and we mint liquidity tokens based on the weth
             _addLiquidityMintAndTransfer(
@@ -179,6 +155,7 @@ contract TSwapPool is ERC20 {
                 maximumPoolTokensToDeposit,
                 wethToDeposit
             );
+
             liquidityTokensToMint = wethToDeposit;
         }
     }
@@ -187,21 +164,18 @@ contract TSwapPool is ERC20 {
     /// @param wethToDeposit The amount of WETH the user is going to deposit
     /// @param poolTokensToDeposit The amount of pool tokens the user is going to deposit
     /// @param liquidityTokensToMint The amount of liquidity tokens the user is going to mint
-    function _addLiquidityMintAndTransfer(
-        uint256 wethToDeposit,
-        uint256 poolTokensToDeposit,
-        uint256 liquidityTokensToMint
-    ) private {
+    function _addLiquidityMintAndTransfer(uint256 wethToDeposit, uint256 poolTokensToDeposit, uint256 liquidityTokensToMint) private {
+        // 调用 _mint 方法为用户铸造相应数量的流动性代币。这些流动性代币代表用户在流动性池中的份额
+        // _mint 方法通常用于铸造新的代币，并将其分配给指定的地址
         _mint(msg.sender, liquidityTokensToMint);
+
         emit LiquidityAdded(msg.sender, poolTokensToDeposit, wethToDeposit);
 
         // Interactions
-        i_wethToken.safeTransferFrom(msg.sender, address(this), wethToDeposit);
-        i_poolToken.safeTransferFrom(
-            msg.sender,
-            address(this),
-            poolTokensToDeposit
-        );
+        // function safeTransferFrom(address from, address to, uint256 amount) external;
+        // 将 WETH 从 msg.sender（调用者）转移到当前合约地址 address(this)
+        i_wethToken.safeTransferFrom(msg.sender, address(this), wethToDeposit);        
+        i_poolToken.safeTransferFrom(msg.sender, address(this), poolTokensToDeposit);
     }
 
     /// @notice Removes liquidity from the pool
