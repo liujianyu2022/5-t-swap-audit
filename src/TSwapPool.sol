@@ -105,7 +105,7 @@ contract TSwapPool is ERC20 {
         // 向已有的流动性池添加流动性
         if (totalLiquidityTokenSupply() > 0) {
 
-            // 函数获取合约中当前的 WETH 和池子代币的储备量。
+            // 获取合约中当前的 WETH 和池子代币的储备量。
             uint256 wethReserves = i_wethToken.balanceOf(address(this));
             uint256 poolTokenReserves = i_poolToken.balanceOf(address(this));
 
@@ -145,6 +145,9 @@ contract TSwapPool is ERC20 {
                 );
             }
 
+            // 1. 调用 _mint 方法为用户铸造相应数量的流动性代币
+            // 2. 将 WETH 从 msg.sender（调用者）转移到当前合约地址 address(this)
+            // 3. 将 poolTokens 从 msg.sender（调用者）转移到当前合约地址 address(this)
             _addLiquidityMintAndTransfer(wethToDeposit, poolTokensToDeposit, liquidityTokensToMint);
         } else {        
             // 初始资金注入
@@ -198,12 +201,14 @@ contract TSwapPool is ERC20 {
         // We do the same math as above
         uint256 wethToWithdraw = (liquidityTokensToBurn *
             i_wethToken.balanceOf(address(this))) / totalLiquidityTokenSupply();
+
         uint256 poolTokensToWithdraw = (liquidityTokensToBurn *
             i_poolToken.balanceOf(address(this))) / totalLiquidityTokenSupply();
 
         if (wethToWithdraw < minWethToWithdraw) {
             revert TSwapPool__OutputTooLow(wethToWithdraw, minWethToWithdraw);
         }
+
         if (poolTokensToWithdraw < minPoolTokensToWithdraw) {
             revert TSwapPool__OutputTooLow(
                 poolTokensToWithdraw,
@@ -212,6 +217,7 @@ contract TSwapPool is ERC20 {
         }
 
         _burn(msg.sender, liquidityTokensToBurn);
+        
         emit LiquidityRemoved(msg.sender, wethToWithdraw, poolTokensToWithdraw);
 
         i_wethToken.safeTransfer(msg.sender, wethToWithdraw);
@@ -397,9 +403,7 @@ contract TSwapPool is ERC20 {
     /*//////////////////////////////////////////////////////////////
                    EXTERNAL AND PUBLIC VIEW AND PURE
     //////////////////////////////////////////////////////////////*/
-    function getPoolTokensToDepositBasedOnWeth(
-        uint256 wethToDeposit
-    ) public view returns (uint256) {
+    function getPoolTokensToDepositBasedOnWeth(uint256 wethToDeposit) public view returns (uint256) {
         uint256 poolTokenReserves = i_poolToken.balanceOf(address(this));
         uint256 wethReserves = i_wethToken.balanceOf(address(this));
         return (wethToDeposit * poolTokenReserves) / wethReserves;
