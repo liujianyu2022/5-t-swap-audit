@@ -1,16 +1,3 @@
-/**
- * /-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\
- * |                                     |
- * \ _____    ____                       /
- * -|_   _|  / ___|_      ____ _ _ __    -
- * /  | |____\___ \ \ /\ / / _` | '_ \   \
- * |  | |_____|__) \ V  V / (_| | |_) |  |
- * \  |_|    |____/ \_/\_/ \__,_| .__/   /
- * -                            |_|      -
- * /                                     \
- * |                                     |
- * \-/|\-/|\-/|\-/|\-/|\-/|\-/|\-/|\-/|\-/
- */
 // SPDX-License-Identifier: GNU General Public License v3.0
 pragma solidity 0.8.20;
 
@@ -19,14 +6,17 @@ import {ERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract TSwapPool is ERC20 {
     error TSwapPool__DeadlineHasPassed(uint64 deadline);
+    
     error TSwapPool__MaxPoolTokenDepositTooHigh(
         uint256 maximumPoolTokensToDeposit,
         uint256 poolTokensToDeposit
     );
+
     error TSwapPool__MinLiquidityTokensToMintTooLow(
         uint256 minimumLiquidityTokensToMint,
         uint256 liquidityTokensToMint
     );
+
     error TSwapPool__WethDepositAmountTooLow(
         uint256 minimumWethDeposit,
         uint256 wethToDeposit
@@ -37,18 +27,13 @@ contract TSwapPool is ERC20 {
 
     using SafeERC20 for IERC20;
 
-    /*//////////////////////////////////////////////////////////////
-                            STATE VARIABLES
-    //////////////////////////////////////////////////////////////*/
+
     IERC20 private immutable i_wethToken;
     IERC20 private immutable i_poolToken;
-    uint256 private constant MINIMUM_WETH_LIQUIDITY = 1_000_000_000;
+    uint256 private constant MINIMUM_WETH_LIQUIDITY = 1_000_000_000;        // 1 gwei
     uint256 private swap_count = 0;
     uint256 private constant SWAP_COUNT_MAX = 10;
 
-    /*//////////////////////////////////////////////////////////////
-                                 EVENTS
-    //////////////////////////////////////////////////////////////*/
     event LiquidityAdded(
         address indexed liquidityProvider,
         uint256 wethDeposited,
@@ -102,14 +87,14 @@ contract TSwapPool is ERC20 {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Adds liquidity to the pool
-    /// @dev The invariant of this function is that the ratio of WETH, PoolTokens, and LiquidityTokens is the same
-    /// before and after the transaction
+    /// @dev The invariant of this function is that the ratio of WETH, PoolTokens, and LiquidityTokens is the same before and after the transaction
     /// @param wethToDeposit Amount of WETH the user is going to deposit
     /// @param minimumLiquidityTokensToMint We derive the amount of liquidity tokens to mint from the amount of WETH the
     /// user is going to deposit, but set a minimum so they know approx what they will accept
     /// @param maximumPoolTokensToDeposit The maximum amount of pool tokens the user is willing to deposit, again it's
     /// derived from the amount of WETH the user is going to deposit
     /// @param deadline The deadline for the transaction to be completed by
+
     function deposit(
         uint256 wethToDeposit,
         uint256 minimumLiquidityTokensToMint,
@@ -118,6 +103,7 @@ contract TSwapPool is ERC20 {
     )
         external
         revertIfZero(wethToDeposit)
+        revertIfDeadlinePassed(deadline)                // revise: deadline is parameter is unused.
         returns (uint256 liquidityTokensToMint)
     {
         if (wethToDeposit < MINIMUM_WETH_LIQUIDITY) {
@@ -126,26 +112,27 @@ contract TSwapPool is ERC20 {
                 wethToDeposit
             );
         }
+
+        // 向已有的流动性池添加流动性
         if (totalLiquidityTokenSupply() > 0) {
+
+            // 获取合约中当前的 WETH 和池子代币的储备量。
             uint256 wethReserves = i_wethToken.balanceOf(address(this));
             uint256 poolTokenReserves = i_poolToken.balanceOf(address(this));
-            // Our invariant says weth, poolTokens, and liquidity tokens must always have the same ratio after the
-            // initial deposit
-            // poolTokens / constant(k) = weth
-            // weth / constant(k) = liquidityTokens
-            // aka...
-            // weth / poolTokens = constant(k)
-            // To make sure this holds, we can make sure the new balance will match the old balance
-            // (wethReserves + wethToDeposit) / (poolTokenReserves + poolTokensToDeposit) = constant(k)
-            // (wethReserves + wethToDeposit) / (poolTokenReserves + poolTokensToDeposit) =
-            // (wethReserves / poolTokenReserves)
-            //
+            
+    
+ 
             // So we can do some elementary math now to figure out poolTokensToDeposit...
-            // (wethReserves + wethToDeposit) = (poolTokenReserves + poolTokensToDeposit) * (wethReserves / poolTokenReserves)
-            // wethReserves + wethToDeposit  = poolTokenReserves * (wethReserves / poolTokenReserves) + poolTokensToDeposit * (wethReserves / poolTokenReserves)
-            // wethReserves + wethToDeposit = wethReserves + poolTokensToDeposit * (wethReserves / poolTokenReserves)
-            // wethToDeposit / (wethReserves / poolTokenReserves) = poolTokensToDeposit
-            // (wethToDeposit * poolTokenReserves) / wethReserves = poolTokensToDeposit
+            
+            // x*y = (x+Δx)*(y-Δy)   --->   x*y = x*y - x*Δy + y*Δx - Δx*Δy
+            // y*Δx - Δx*Δy = x*Δy   --->   Δx*(y - Δy) = x*Δy                  ---> Δx = x*[Δy/(y - Δy)]
+            // x*Δy + Δx*Δy = y*Δx   --->   Δy*(x + Δx) = y*Δx                  ---> Δy = y*[Δx/(x + Δx)]
+            // x  --->  poolTokenReserves     
+            // Δx --->  poolTokensToDeposit
+            // y  --->  wethReserves     
+            // Δy --->  wethToDeposit
+
+
             uint256 poolTokensToDeposit = getPoolTokensToDepositBasedOnWeth(
                 wethToDeposit
             );
