@@ -120,8 +120,6 @@ contract TSwapPool is ERC20 {
             uint256 wethReserves = i_wethToken.balanceOf(address(this));
             uint256 poolTokenReserves = i_poolToken.balanceOf(address(this));
             
-    
- 
             // So we can do some elementary math now to figure out poolTokensToDeposit...
             
             // x*y = (x+Δx)*(y-Δy)   --->   x*y = x*y - x*Δy + y*Δx - Δx*Δy
@@ -406,6 +404,7 @@ contract TSwapPool is ERC20 {
         }
         return false;
     }
+
 
     /*//////////////////////////////////////////////////////////////
                    EXTERNAL AND PUBLIC VIEW AND PURE
