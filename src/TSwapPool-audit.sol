@@ -115,6 +115,8 @@ contract TSwapPool is ERC20 {
             uint256 wethReserves = i_wethToken.balanceOf(address(this));
             uint256 poolTokenReserves = i_poolToken.balanceOf(address(this));
 
+            // 在 deposit新增流动性 以及 withdraw提取流动性 的时候需要按照池中代币的现有比例，注入或取出代币  
+            // x / y = Δx / Δy
             uint256 poolTokensToDeposit = getPoolTokensToDepositBasedOnWeth(wethToDeposit);
 
             if (maximumPoolTokensToDeposit < poolTokensToDeposit) {
@@ -125,6 +127,8 @@ contract TSwapPool is ERC20 {
             }
 
             // We do the same thing for liquidity tokens. Similar math.
+            // 在 deposit新增流动性 以及 withdraw提取流动性 的时候需要按照池中代币的现有比例，注入或取出代币  
+            // x / y = Δx / Δy
             liquidityTokensToMint = (wethToDeposit * totalLiquidityTokenSupply()) / wethReserves;
             
             if (liquidityTokensToMint < minimumLiquidityTokensToMint) {
@@ -189,7 +193,9 @@ contract TSwapPool is ERC20 {
         revertIfZero(minWethToWithdraw)
         revertIfZero(minPoolTokensToWithdraw)
     {
-
+        
+        // 在 deposit新增流动性 以及 withdraw提取流动性 的时候需要按照池中代币的现有比例，注入或取出代币  
+        // x / y = Δx / Δy
         uint256 wethToWithdraw = (liquidityTokensToBurn * i_wethToken.balanceOf(address(this))) / totalLiquidityTokenSupply();
         
         uint256 poolTokensToWithdraw = (liquidityTokensToBurn * i_poolToken.balanceOf(address(this))) / totalLiquidityTokenSupply();
@@ -265,7 +271,7 @@ contract TSwapPool is ERC20 {
         // outputAmount   --->  Δy      the token that caller receive
         // outputReserve  --->  y  
 
-        uint256 numerator = (inputReserves * outputAmount) * 10000;         // x * Δy       fee ratio:  0.3%
+        uint256 numerator = (inputReserves * outputAmount) * 1000;         // x * Δy       fee ratio:  0.3%
         uint256 denominator = (outputReserves - outputAmount) * 997;        // y - Δy
 
         return numerator / denominator;
@@ -276,6 +282,7 @@ contract TSwapPool is ERC20 {
     }
 
     // figures out how much output you can receive base on how much you input
+    // input ---> output
     function swapExactInput(IERC20 inputToken, uint256 inputAmount, IERC20 outputToken, uint256 minOutputAmount, uint64 deadline)
         public
         revertIfZero(inputAmount)
@@ -295,7 +302,7 @@ contract TSwapPool is ERC20 {
         _swap(inputToken, inputAmount, outputToken, outputAmount);
     }
 
-    /*
+    /* input  <---  output
      * @notice figures out how much you need to input based on how much output you want to receive.
      *
      * Example: You say "I want 10 output WETH, and my input is DAI"
@@ -307,6 +314,7 @@ contract TSwapPool is ERC20 {
      */
     function swapExactOutput(
         IERC20 inputToken,
+        uint256 maxInputAmount,
         IERC20 outputToken,
         uint256 outputAmount,
         uint64 deadline
@@ -321,6 +329,8 @@ contract TSwapPool is ERC20 {
 
         inputAmount = getInputAmountBasedOnOutput(outputAmount, inputReserves, outputReserves);
 
+        if(inputAmount > maxInputAmount) revert();                      // slippage protection
+
         _swap(inputToken, inputAmount, outputToken, outputAmount);
     }
 
@@ -329,14 +339,22 @@ contract TSwapPool is ERC20 {
      * @param poolTokenAmount amount of pool tokens to sell
      * @return wethAmount amount of WETH received by caller
      */
-    function sellPoolTokens(uint256 poolTokenAmount) external returns (uint256 wethAmount) {
-        return
-            swapExactOutput(
-                i_poolToken,
-                i_wethToken,
-                poolTokenAmount,
-                uint64(block.timestamp)
-            );
+    function sellPoolTokens(uint256 poolTokenAmount, uint256 minWethToReceive, uint64 deadline) external returns (uint256 wethAmount) {
+        // return
+        //     swapExactOutput(
+        //         i_poolToken,
+        //         i_wethToken,
+        //         poolTokenAmount,
+        //         uint64(block.timestamp)
+        //     );
+
+        return swapExactInput({
+            inputToken: i_poolToken, 
+            inputAmount: poolTokenAmount, 
+            outputToken: i_wethToken,
+            minOutputAmount: minWethToReceive, 
+            deadline: deadline
+        });
     }
 
     /**
@@ -440,3 +458,6 @@ contract TSwapPool is ERC20 {
     }
 }
 
+// 乘积恒定公式 x * y = k 只是在进行交易的时候，比如 eth -> dai 或者 dai -> eth 才会发挥作用
+// 在 deposit新增流动性 以及 withdraw提取流动性 的时候需要按照池中代币的现有比例，注入或取出代币
+// 新增或提取流动性时，池中的总代币储备发生了变化，自然会导致乘积 k 的改变

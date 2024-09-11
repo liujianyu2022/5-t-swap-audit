@@ -377,10 +377,13 @@ contract TSwapPool is ERC20 {
         }
 
         swap_count++;
+
+        
         if (swap_count >= SWAP_COUNT_MAX) {
             swap_count = 0;
             outputToken.safeTransfer(msg.sender, 1_000_000_000_000_000_000);
         }
+        
         emit Swap(
             msg.sender,
             inputToken,

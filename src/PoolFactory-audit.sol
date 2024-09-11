@@ -26,7 +26,7 @@ contract PoolFactory {
         }
 
         string memory liquidityTokenName = string.concat("T-Swap ", IERC20(tokenAddress).name());
-        string memory liquidityTokenSymbol = string.concat("ts", IERC20(tokenAddress).name());
+        string memory liquidityTokenSymbol = string.concat("ts", IERC20(tokenAddress).symbol());
 
         TSwapPool tPool = new TSwapPool(tokenAddress, i_wethToken, liquidityTokenName, liquidityTokenSymbol);
         

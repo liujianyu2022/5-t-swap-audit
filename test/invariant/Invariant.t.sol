@@ -14,9 +14,9 @@ contract Invariant is StdInvariant, Test {
     ERC20Mock weth;
     ERC20Mock tokenB;
 
-    int256 constant STARTING_X = 100e18; // starting ERC20
-    int256 constant STARTING_Y = 50e18; // starting WETH
-    uint256 constant FEE = 997e15; //
+    int256 constant STARTING_X = 100e18;        // starting ERC20
+    int256 constant STARTING_Y = 50e18;         // starting WETH
+    uint256 constant FEE = 997e15;              // fee ratio   0.3%
     int256 constant MATH_PRECISION = 1e18;
 
     TSwapPoolHandler handler;
@@ -32,6 +32,8 @@ contract Invariant is StdInvariant, Test {
         weth.mint(address(this), uint256(STARTING_Y));
         poolToken.approve(address(pool), type(uint256).max);
         weth.approve(address(pool), type(uint256).max);
+
+        // uint256 wethToDeposit, uint256 minimumLiquidityTokensToMint, uint256 maximumPoolTokensToDeposit, uint64 deadline
         pool.deposit(uint256(STARTING_Y), uint256(STARTING_Y), uint256(STARTING_X), uint64(block.timestamp));
 
         handler = new TSwapPoolHandler(pool);

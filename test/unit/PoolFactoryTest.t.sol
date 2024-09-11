@@ -19,14 +19,36 @@ contract PoolFactoryTest is Test {
     }
 
     function testCreatePool() public {
-        address poolAddress = factory.createPool(address(tokenA));
-        assertEq(poolAddress, factory.getPool(address(tokenA)));
-        assertEq(address(tokenA), factory.getToken(poolAddress));
+        address poolAddress1 = factory.createPool(address(tokenA));
+        address poolAddress2 = factory.createPool(address(tokenB));
+
+        assertEq(poolAddress1, factory.getPool(address(tokenA)));
+        assertEq(address(tokenA), factory.getToken(poolAddress1));
+        
+        assertEq(poolAddress2, factory.getPool(address(tokenB)));
+        assertEq(address(tokenB), factory.getToken(poolAddress2));
+    }
+
+    function testGetWethToken() public{
+        assertEq(address(mockWeth), factory.getWethToken());
     }
 
     function testCantCreatePoolIfExists() public {
         factory.createPool(address(tokenA));
-        vm.expectRevert(abi.encodeWithSelector(PoolFactory.PoolFactory__PoolAlreadyExists.selector, address(tokenA)));
+        
+        vm.expectRevert(
+            // abi.encodeWithSelector ensures that the revert error is specifically 
+            // due to the PoolAlreadyExists error for the tokenA
+            abi.encodeWithSelector(
+                PoolFactory.PoolFactory__PoolAlreadyExists.selector, 
+                address(tokenA)                                         // it's the parameter
+            )
+        );
+        
         factory.createPool(address(tokenA));
     }
+
 }
+
+// if you just want to test this file,you can run the command as follow:
+// forge test --match-path test/unit/PoolFactoryTest.t.sol
